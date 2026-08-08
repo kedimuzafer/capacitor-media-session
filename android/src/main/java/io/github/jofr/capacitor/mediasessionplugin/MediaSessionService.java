@@ -153,7 +153,23 @@ public class MediaSessionService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        MediaButtonReceiver.handleIntent(mediaSession, intent);
+        // Started via startForegroundService() (e.g. from a media notification
+        // action button). The system requires startForeground() within ~5s or it
+        // kills the app with ForegroundServiceDidNotStartInTimeException. The
+        // plugin normally calls startForeground() from connectAndInitialize(),
+        // but when this service is launched straight from a notification action
+        // that initialization may not have run yet.
+        if (notificationBuilder != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notificationBuilder.build());
+            }
+        }
+
+        if (mediaSession != null) {
+            MediaButtonReceiver.handleIntent(mediaSession, intent);
+        }
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -219,6 +235,14 @@ public class MediaSessionService extends Service {
 
     @SuppressLint("RestrictedApi")
     public void update() {
+        // Guard against being called before connectAndInitialize() has run.
+        // The plugin can observe a non-null service reference while this
+        // service is still mid-initialization (mediaSession/plugin null),
+        // which previously crashed with a NullPointerException.
+        if (mediaSession == null || plugin == null) {
+            return;
+        }
+
         if (possibleActionsUpdate) {
           if (notificationBuilder != null) {
             notificationBuilder.mActions.clear();

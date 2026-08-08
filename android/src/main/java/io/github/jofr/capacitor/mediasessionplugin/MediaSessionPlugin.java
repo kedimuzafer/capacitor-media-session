@@ -88,6 +88,9 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     private void updateServiceMetadata() {
+        if (service == null) {
+            return;
+        }
         service.setTitle(title);
         service.setArtist(artist);
         service.setAlbum(album);
@@ -136,11 +139,14 @@ public class MediaSessionPlugin extends Plugin {
             }
         }
 
-        if (service != null) { updateServiceMetadata(); };
+        updateServiceMetadata();
         call.resolve();
     }
 
     private void updateServicePlaybackState() {
+        if (service == null) {
+            return;
+        }
         if (playbackState.equals("playing")) {
             service.setPlaybackState(PlaybackStateCompat.STATE_PLAYING);
             service.update();
@@ -170,6 +176,9 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     private void updateServicePositionState() {
+        if (service == null) {
+            return;
+        }
         service.setDuration(Math.round(duration * 1000));
         service.setPosition(Math.round(position * 1000));
         float playbackSpeed = playbackRate == 0.0 ? (float) 1.0 : (float) playbackRate;
