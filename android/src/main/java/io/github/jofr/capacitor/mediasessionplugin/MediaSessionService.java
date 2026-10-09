@@ -159,18 +159,42 @@ public class MediaSessionService extends Service {
         // plugin normally calls startForeground() from connectAndInitialize(),
         // but when this service is launched straight from a notification action
         // that initialization may not have run yet.
-        if (notificationBuilder != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            } else {
-                startForeground(NOTIFICATION_ID, notificationBuilder.build());
-            }
+        //
+        // v5: startForeground() is now UNCONDITIONAL. v4 skipped it when
+        // notificationBuilder was still null (service cold-started by a media
+        // button / Bluetooth headset press while the web session was not
+        // initialized) and the system still killed the app 5s later. If there
+        // is no builder yet, post a minimal placeholder notification first.
+        NotificationCompat.Builder builder = notificationBuilder != null
+                ? notificationBuilder
+                : placeholderNotification();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, builder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        } else {
+            startForeground(NOTIFICATION_ID, builder.build());
         }
 
-        if (mediaSession != null) {
-            MediaButtonReceiver.handleIntent(mediaSession, intent);
+        if (mediaSession == null) {
+            // Nothing to control: no web session is attached. Leave the
+            // foreground state cleanly instead of lingering or crashing.
+            stopForeground(true);
+            stopSelf(startId);
+            return START_NOT_STICKY;
         }
+
+        MediaButtonReceiver.handleIntent(mediaSession, intent);
         return super.onStartCommand(intent, flags, startId);
+    }
+
+    private NotificationCompat.Builder placeholderNotification() {
+        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager != null) {
+            manager.createNotificationChannel(new NotificationChannel("playback", "Playback", NotificationManager.IMPORTANCE_LOW));
+        }
+        return new NotificationCompat.Builder(this, "playback")
+                .setSmallIcon(R.drawable.ic_baseline_volume_up_24)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true);
     }
 
     public void setPlaybackState(int playbackState) {
